@@ -7,6 +7,7 @@ import xml2js from 'xml2js';
 import { CONSTANTS } from './constants';
 import { Extension } from './models/extension';
 import { Package } from './models/package';
+import { ProGetService } from './services/progetService';
 import { Manifest } from './types/XmlManifest';
 import { PackageJson } from './types/PackageJson';
 
@@ -42,13 +43,13 @@ const getExtensionPathsRecursively = (dir: string, depth: number, extensionPaths
 };
 
 /**
- * Gets the list of packages (collections of extensions) in a directory.
- * @param dir - The directory to search for extensions.
+ * Gets the list of packages (collections of extensions) from sources.
+ * @param sources - Array of sources (directory paths or ProGet feed URLs).
  * @returns A promise resolving to an array of packages.
  */
-export const getPackages = async (dirs: string[]): Promise<Package[]> => {
+export const getPackages = async (sources: string[]): Promise<Package[]> => {
   const packages: Package[] = [];
-  const extensions = await getExtensions(dirs);
+  const extensions = await getExtensions(sources);
   if (!extensions?.length) return [];
 
   for (const extension of extensions) {
@@ -70,72 +71,161 @@ export const getPackages = async (dirs: string[]): Promise<Package[]> => {
 };
 
 /**
- * Gets the list of extensions in a directory.
- * @param dir - The directory to search for extensions.
+ * Gets the list of extensions from sources (local directories and ProGet feeds).
+ * @param sources - Array of sources (directory paths or ProGet feed URLs).
  * @returns A promise resolving to an array of extensions.
  */
-const getExtensions = async (dirs: string[]): Promise<Extension[]> => {
+const getExtensions = async (sources: string[]): Promise<Extension[]> => {
+  const extensions: Extension[] = [];
+  
+  // Separate local directories from ProGet feed URLs
+  const localDirs = sources.filter(source => !ProGetService.isProGetFeedUrl(source));
+  const feedUrls = sources.filter(source => ProGetService.isProGetFeedUrl(source));
+
+  // Process local directories (existing logic)
+  const localExtensions = await getExtensionsFromLocalDirectories(localDirs);
+  extensions.push(...localExtensions);
+
+  // Process ProGet feeds
+  for (const feedUrl of feedUrls) {
+    const feedExtensions = await getExtensionsFromProGetFeed(feedUrl);
+    extensions.push(...feedExtensions);
+  }
+
+  return extensions;
+};
+
+/**
+ * Gets extensions from local directories (original logic).
+ * @param dirs - Array of local directory paths.
+ * @returns A promise resolving to an array of extensions.
+ */
+const getExtensionsFromLocalDirectories = async (dirs: string[]): Promise<Extension[]> => {
   const extensionPaths = dirs.map((dir) => getExtensionPathsRecursively(dir, 3)).flat();
   const extensions: Extension[] = [];
   const parser = new xml2js.Parser({ explicitArray: false });
 
   for (const extensionPath of extensionPaths) {
-    const zip = new AdmZip(extensionPath);
-    const extManifest = (await parser.parseStringPromise(zip.readAsText('extension.vsixmanifest'))) as Manifest;
-    const npmManifest = JSON.parse(zip.readAsText('extension/package.json')) as PackageJson;
-    const extension = new Extension();
+    try {
+      const zip = new AdmZip(extensionPath);
+      const extManifest = (await parser.parseStringPromise(zip.readAsText('extension.vsixmanifest'))) as Manifest;
+      const npmManifest = JSON.parse(zip.readAsText('extension/package.json')) as PackageJson;
+      const extension = new Extension();
 
-    const PackageManifest = extManifest?.PackageManifest;
-    if (!PackageManifest) continue;
+      const PackageManifest = extManifest?.PackageManifest;
+      if (!PackageManifest) continue;
 
-    extension.identity.target = PackageManifest.Metadata?.Identity?.$?.TargetPlatform || 'any';
-    if (!isCompatibleTarget(extension.identity.target)) continue;
+      extension.identity.target = PackageManifest.Metadata?.Identity?.$?.TargetPlatform || 'any';
+      if (!isCompatibleTarget(extension.identity.target)) continue;
 
-    /* BASE */
-    extension.name = PackageManifest.Metadata?.DisplayName;
-    extension.id = PackageManifest.Metadata?.Identity?.$?.Id;
-    extension.extensionPath = extensionPath;
+      /* BASE */
+      extension.name = PackageManifest.Metadata?.DisplayName;
+      extension.id = PackageManifest.Metadata?.Identity?.$?.Id;
+      extension.extensionPath = extensionPath;
 
-    const propertiesArray = PackageManifest.Metadata?.Properties?.Property || [];
+      const propertiesArray = PackageManifest.Metadata?.Properties?.Property || [];
 
-    /* IDENTIFY */
-    extension.identity.version = PackageManifest.Metadata?.Identity?.$?.Version;
-    extension.identity.preRelease = !!propertiesArray.find(
-      (prop) => prop?.$?.Id === 'Microsoft.VisualStudio.Code.PreRelease'
-    );
-    extension.identity.preview = npmManifest?.preview;
-    extension.identity.engine = npmManifest?.engines?.vscode || '*';
+      /* IDENTIFY */
+      extension.identity.version = PackageManifest.Metadata?.Identity?.$?.Version;
+      extension.identity.preRelease = !!propertiesArray.find(
+        (prop) => prop?.$?.Id === 'Microsoft.VisualStudio.Code.PreRelease'
+      );
+      extension.identity.preview = npmManifest?.preview;
+      extension.identity.engine = npmManifest?.engines?.vscode || '*';
 
-    /* METADATA */
-    extension.metadata.description = PackageManifest.Metadata?.Description?._;
-    extension.metadata.publisher = PackageManifest.Metadata?.Identity?.$?.Publisher;
-    extension.metadata.publishedAt = fs.statSync(extensionPath).ctime;
-    extension.metadata.identifier = `${extension.metadata.publisher.toLowerCase()}.${extension.id.toLowerCase()}`;
-    extension.metadata.language = PackageManifest.Metadata?.Identity?.$?.Language || 'en-US';
-    extension.metadata.categories = npmManifest.categories || [];
+      /* METADATA */
+      extension.metadata.description = PackageManifest.Metadata?.Description?._;
+      extension.metadata.publisher = PackageManifest.Metadata?.Identity?.$?.Publisher;
+      extension.metadata.publishedAt = fs.statSync(extensionPath).ctime;
+      extension.metadata.identifier = `${extension.metadata.publisher.toLowerCase()}.${extension.id.toLowerCase()}`;
+      extension.metadata.language = PackageManifest.Metadata?.Identity?.$?.Language || 'en-US';
+      extension.metadata.categories = npmManifest.categories || [];
 
-    /* ASSETS */
-    const readmePath = PackageManifest.Assets?.Asset?.find(
-      (asset) => asset?.$?.Type === 'Microsoft.VisualStudio.Services.Content.Details'
-    )?.$?.Path;
-    const changelogPath = PackageManifest.Assets?.Asset?.find(
-      (asset) => asset?.$?.Type === 'Microsoft.VisualStudio.Services.Content.Changelog'
-    )?.$?.Path;
-    const imagePath = PackageManifest.Metadata?.Icon;
+      /* ASSETS */
+      const readmePath = PackageManifest.Assets?.Asset?.find(
+        (asset) => asset?.$?.Type === 'Microsoft.VisualStudio.Services.Content.Details'
+      )?.$?.Path;
+      const changelogPath = PackageManifest.Assets?.Asset?.find(
+        (asset) => asset?.$?.Type === 'Microsoft.VisualStudio.Services.Content.Changelog'
+      )?.$?.Path;
+      const imagePath = PackageManifest.Metadata?.Icon;
 
-    extension.assets.readme = readmePath ? zip.readAsText(readmePath) : '';
-    extension.assets.changelog = changelogPath ? zip.readAsText(changelogPath) : '';
-    extension.assets.image = imagePath
-      ? `data:image/png;base64,${Buffer.from(zip.readFile(imagePath) as Buffer).toString('base64')}`
-      : '';
+      extension.assets.readme = readmePath ? zip.readAsText(readmePath) : '';
+      extension.assets.changelog = changelogPath ? zip.readAsText(changelogPath) : '';
+      extension.assets.image = imagePath
+        ? `data:image/png;base64,${(zip.readFile(imagePath) as Buffer).toString('base64')}`
+        : '';
 
-    /* LINKS */
-    extension.links.getStarted = propertiesArray?.find((x) => x?.$?.Id?.endsWith('Links.Getstarted'))?.$?.Value || '';
-    extension.links.learn = propertiesArray?.find((x) => x?.$?.Id?.endsWith('Links.Learn'))?.$?.Value || '';
-    extension.links.repository = propertiesArray?.find((x) => x?.$?.Id?.endsWith('Links.Repository'))?.$?.Value || '';
-    extension.links.support = propertiesArray?.find((x) => x?.$?.Id?.endsWith('Links.Support'))?.$?.Value || '';
+      /* LINKS */
+      extension.links.getStarted = propertiesArray?.find((x) => x?.$?.Id?.endsWith('Links.Getstarted'))?.$?.Value || '';
+      extension.links.learn = propertiesArray?.find((x) => x?.$?.Id?.endsWith('Links.Learn'))?.$?.Value || '';
+      extension.links.repository = propertiesArray?.find((x) => x?.$?.Id?.endsWith('Links.Repository'))?.$?.Value || '';
+      extension.links.support = propertiesArray?.find((x) => x?.$?.Id?.endsWith('Links.Support'))?.$?.Value || '';
 
-    extensions.push(extension);
+      extensions.push(extension);
+    } catch (error) {
+      console.error(`Error processing extension ${extensionPath}:`, error);
+    }
+  }
+
+  return extensions;
+};
+
+/**
+ * Gets extensions from a ProGet feed.
+ * @param feedUrl - The ProGet feed URL.
+ * @returns A promise resolving to an array of extensions.
+ */
+const getExtensionsFromProGetFeed = async (feedUrl: string): Promise<Extension[]> => {
+  const extensions: Extension[] = [];
+  
+  try {
+    const progetService = new ProGetService(feedUrl);
+    const packages = await progetService.fetchPackages();
+
+    for (const pkg of packages) {
+      // Create an extension directly from the package since ProGet provides all info in one call
+      const extension = new Extension();
+      
+      // Basic information
+      extension.id = pkg.id;
+      extension.name = pkg.title || pkg.id;
+      extension.extensionPath = pkg.downloadUrl || `${feedUrl}/download/${pkg.id}/${pkg.latestVersion}`;
+
+      // Identity
+      extension.identity.version = pkg.latestVersion || '1.0.0';
+      extension.identity.target = 'any'; // Default target
+      extension.identity.preRelease = false;
+      extension.identity.preview = false;
+      extension.identity.engine = '*'; // Default engine
+
+      // Metadata
+      extension.metadata.description = pkg.description || '';
+      extension.metadata.publisher = pkg.authors?.[0] || 'ProGet';
+      extension.metadata.publishedAt = pkg.publishedAt ? new Date(pkg.publishedAt) : new Date();
+      extension.metadata.identifier = `${extension.metadata.publisher.toLowerCase()}.${extension.id.toLowerCase()}`;
+      extension.metadata.language = 'en-US';
+      extension.metadata.categories = pkg.tags || [];
+
+      // Assets - Will be empty since we can't extract them without downloading
+      extension.assets.readme = 'Extension from ProGet feed. Download to view detailed information.';
+      extension.assets.changelog = '';
+      extension.assets.image = '';
+
+      // Links
+      extension.links.getStarted = '';
+      extension.links.learn = '';
+      extension.links.repository = pkg.projectUrl || '';
+      extension.links.support = feedUrl;
+
+      // Check if platform is compatible
+      if (!isCompatibleTarget(extension.identity.target)) continue;
+      
+      extensions.push(extension);
+    }
+  } catch (error) {
+    console.error(`Error fetching extensions from ProGet feed ${feedUrl}:`, error);
+    vscode.window.showErrorMessage(`Failed to fetch extensions from ProGet feed: ${String(error)}`);
   }
 
   return extensions;
@@ -174,24 +264,46 @@ const getExtensionInstalledVersion = (identifier: string): string => {
  */
 export const installExtension = async (pkg: Package, ctx: vscode.ExtensionContext): Promise<string> => {
   const downloadDir = downloadDirectoryExists(ctx);
-  const copiedExtensionPath = path.join(downloadDir, path.basename(pkg.extension.extensionPath));
+  let copiedExtensionPath: string;
+  let shouldCleanup = true;
 
-  if (!fs.existsSync(pkg.extension.extensionPath)) {
-    await vscode.window.showErrorMessage(
-      `Failed to install ${pkg.extension.id}:v${pkg.extension.identity.version} visx file doesn't exist`
-    );
-    return '';
+  // Check if this is a remote package (from ProGet feed)
+  if (ProGetService.isProGetFeedUrl(pkg.extension.extensionPath) || 
+      pkg.extension.extensionPath.startsWith('http')) {
+    // Download the package from ProGet feed
+    const downloadedBuffer = await downloadRemotePackage(pkg.extension.extensionPath);
+    if (!downloadedBuffer) {
+      await vscode.window.showErrorMessage(
+        `Failed to download ${pkg.extension.id}:v${pkg.extension.identity.version} from remote source`
+      );
+      return '';
+    }
+
+    // Save the downloaded package to temp directory
+    copiedExtensionPath = path.join(downloadDir, `${pkg.extension.id}-${pkg.extension.identity.version}.vsix`);
+    fs.writeFileSync(copiedExtensionPath, new Uint8Array(downloadedBuffer));
+  } else {
+    // Local file installation (existing logic)
+    if (!fs.existsSync(pkg.extension.extensionPath)) {
+      await vscode.window.showErrorMessage(
+        `Failed to install ${pkg.extension.id}:v${pkg.extension.identity.version} vsix file doesn't exist`
+      );
+      return '';
+    }
+
+    // Copy extension to the download directory
+    copiedExtensionPath = path.join(downloadDir, path.basename(pkg.extension.extensionPath));
+    fs.copyFileSync(pkg.extension.extensionPath, copiedExtensionPath);
   }
-
-  // Copy extension to the download directory
-  fs.copyFileSync(pkg.extension.extensionPath, copiedExtensionPath);
 
   try {
     // Install the extension
     await vscode.commands.executeCommand(CONSTANTS.vsCmdInstall, vscode.Uri.file(copiedExtensionPath));
 
     // Cleanup
-    fs.rmSync(copiedExtensionPath);
+    if (shouldCleanup && fs.existsSync(copiedExtensionPath)) {
+      fs.rmSync(copiedExtensionPath);
+    }
 
     vscode.window.showInformationMessage(
       `Successfully installed ${pkg.extension.id}:v${pkg.extension.identity.version}`
@@ -202,10 +314,46 @@ export const installExtension = async (pkg: Package, ctx: vscode.ExtensionContex
     await vscode.window.showErrorMessage(
       `Failed to install ${pkg.extension.id}:v${pkg.extension.identity.version} with error ${String(err)}`
     );
+    
+    // Cleanup on error
+    if (shouldCleanup && fs.existsSync(copiedExtensionPath)) {
+      fs.rmSync(copiedExtensionPath);
+    }
   }
 
   return '';
 };
+
+/**
+ * Downloads a package from a remote URL.
+ * @param url - The URL to download the package from.
+ * @returns A promise resolving to the package buffer or null if failed.
+ */
+async function downloadRemotePackage(url: string): Promise<Buffer | null> {
+  try {
+    let downloadUrl = url;
+    
+    // Handle relative URLs from ProGet
+    if (url.startsWith('/vsix/')) {
+      // Construct full URL - assume localhost:8624 as default
+      downloadUrl = `http://localhost:8624${url}`;
+    } else if (url.startsWith('/')) {
+      // Other relative URLs
+      downloadUrl = `http://localhost:8624${url}`;
+    }
+    
+    const response = await fetch(downloadUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
+    }
+    
+    const buffer = Buffer.from(await response.arrayBuffer());
+    return buffer;
+  } catch (error) {
+    console.error(`Error downloading package from ${url}:`, error);
+    return null;
+  }
+}
 
 /**
  * Batch updates a list of VS Code extensions.
@@ -222,10 +370,27 @@ export const batchUpdateExtensions = async (pkgs: Package[], ctx: vscode.Extensi
   for (const pkg of pkgs) {
     if (failedIds.includes(pkg.extension.id + pkg.extension.identity.version)) continue;
     pkg.selectedIndex = 0; //latest version
-    const copiedExtensionPath = path.join(downloadDir, path.basename(pkg.extension.extensionPath));
-    fs.copyFileSync(pkg.extension.extensionPath, copiedExtensionPath);
+    
+    let copiedExtensionPath: string;
 
     try {
+      // Check if this is a remote package
+      if (ProGetService.isProGetFeedUrl(pkg.extension.extensionPath) || 
+          pkg.extension.extensionPath.startsWith('http')) {
+        // Download the package from ProGet feed
+        const downloadedBuffer = await downloadRemotePackage(pkg.extension.extensionPath);
+        if (!downloadedBuffer) {
+          throw new Error('Failed to download remote package');
+        }
+
+        copiedExtensionPath = path.join(downloadDir, `${pkg.extension.id}-${pkg.extension.identity.version}.vsix`);
+        fs.writeFileSync(copiedExtensionPath, new Uint8Array(downloadedBuffer));
+      } else {
+        // Local file
+        copiedExtensionPath = path.join(downloadDir, path.basename(pkg.extension.extensionPath));
+        fs.copyFileSync(pkg.extension.extensionPath, copiedExtensionPath);
+      }
+
       console.log(copiedExtensionPath);
       // Install the extension
       await vscode.commands.executeCommand(CONSTANTS.vsCmdInstall, vscode.Uri.file(copiedExtensionPath));

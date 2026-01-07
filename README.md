@@ -10,9 +10,10 @@ Private Marketplace is a Visual Studio Code extension designed for corporate env
 
 - **Secure Extension Management:** Keep control over the extensions available in your corporate environment.
 - **Centralized Distribution:** Easily distribute and manage extensions within your organization.
+- **ProGet Feed Support:** Connect to ProGet server feeds for remote extension distribution.
 - **Offline Support:** Install extensions without an internet connection.
 - **Auto Updates:** Automatically update extensions when new versions are available.
-- **Easy Configuration:** Quickly configure by configuring the directory where the extensions are stored.
+- **Easy Configuration:** Quickly configure by adding directory sources or ProGet feed URLs.
 
 ## Getting Started
 
@@ -26,7 +27,11 @@ Private Marketplace is a Visual Studio Code extension designed for corporate env
 
 To configure Private Marketplace, follow these steps:
 
-1. Add the directory where the extensions are stored once prompted or using the folder icon in the extension's view.
+1. Add extension sources:
+   - **Local directories:** Use the folder icon to add directories containing .vsix files
+   - **ProGet feeds:** Use the globe icon to add ProGet feed URLs (e.g., `http://localhost:8624/feeds/vscode-extensions`)
+     
+     The extension will automatically discover and list packages from ProGet VSIX feeds using the Atom XML API.
 
 #### Optional:
 

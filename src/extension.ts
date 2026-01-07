@@ -114,7 +114,38 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage(`Updated Directory Sources`);
   });
 
-  context.subscriptions.push(addDirCmd);
+  const addProGetFeedCmd = vscode.commands.registerCommand(CONSTANTS.cmdAddProGetFeed, async () => {
+    const feedUrl = await vscode.window.showInputBox({
+      prompt: 'Enter ProGet Feed URL',
+      placeHolder: 'http://localhost:8624/feeds/vscode-extensions',
+      validateInput: (value) => {
+        if (!value) return 'URL is required';
+        if (!value.startsWith('http://') && !value.startsWith('https://')) {
+          return 'URL must start with http:// or https://';
+        }
+        return null;
+      }
+    });
+
+    if (!feedUrl) return;
+
+    const existingPaths: string[] = (await vscode.workspace.getConfiguration('')?.get(CONSTANTS.propSource)) || [];
+    
+    if (existingPaths.includes(feedUrl)) {
+      vscode.window.showWarningMessage('This ProGet feed is already configured');
+      return;
+    }
+
+    existingPaths.push(feedUrl);
+
+    await vscode.workspace
+      .getConfiguration('')
+      .update(CONSTANTS.propSource, existingPaths, vscode.ConfigurationTarget.Global);
+    extensionViewProvider.refresh();
+    vscode.window.showInformationMessage(`Added ProGet feed: ${feedUrl}`);
+  });
+
+  context.subscriptions.push(addDirCmd, addProGetFeedCmd);
 
   if (vscode.window.registerWebviewPanelSerializer) {
     vscode.window.registerWebviewPanelSerializer(CONSTANTS.extensionDetailsView, {
