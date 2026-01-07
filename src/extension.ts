@@ -22,7 +22,7 @@ export function activate(context: vscode.ExtensionContext) {
   // This line of code will only be executed once when your extension is activated
   console.log('Congratulations, your extension "pvmp" is now active!');
 
-  const extensionViewProvider = new TreeViewProvider();
+  const extensionViewProvider = new TreeViewProvider(context);
 
   const treeView = vscode.window.createTreeView(CONSTANTS.treeView, {
     treeDataProvider: extensionViewProvider,
