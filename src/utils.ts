@@ -190,7 +190,26 @@ const getExtensionsFromProGetFeed = async (feedUrl: string): Promise<Extension[]
       // Basic information
       extension.id = pkg.id;
       extension.name = pkg.title || pkg.id;
-      extension.extensionPath = pkg.downloadUrl || `${feedUrl}/download/${pkg.id}/${pkg.latestVersion}`;
+      
+      // Construct proper download URL
+      let downloadUrl = pkg.downloadUrl;
+      if (!downloadUrl) {
+        // Fallback to constructed download URL
+        downloadUrl = `${feedUrl}/download/${encodeURIComponent(pkg.id)}/${encodeURIComponent(pkg.latestVersion || '1.0.0')}`;
+      } else if (downloadUrl.startsWith('/')) {
+        // Convert relative URL to absolute
+        try {
+          const feedUrlObj = new URL(feedUrl);
+          const baseUrl = `${feedUrlObj.protocol}//${feedUrlObj.host}`;
+          downloadUrl = `${baseUrl}${downloadUrl}`;
+        } catch {
+          // Fallback if URL parsing fails
+          const baseUrl = feedUrl.split('/vsix/')[0] || feedUrl.split('/feeds/')[0] || 'http://localhost:8624';
+          downloadUrl = `${baseUrl}${downloadUrl}`;
+        }
+      }
+      
+      extension.extensionPath = downloadUrl;
 
       // Identity
       extension.identity.version = pkg.latestVersion || '1.0.0';
@@ -292,6 +311,8 @@ export const installExtension = async (pkg: Package, ctx: vscode.ExtensionContex
   // Check if this is a remote package (from ProGet feed)
   if (ProGetService.isProGetFeedUrl(pkg.extension.extensionPath) || 
       pkg.extension.extensionPath.startsWith('http')) {
+    console.log(`Installing remote package: ${pkg.extension.id} from ${pkg.extension.extensionPath}`);
+    
     // Download the package from ProGet feed
     const downloadedBuffer = await downloadRemotePackage(pkg.extension.extensionPath);
     if (!downloadedBuffer) {
@@ -303,7 +324,17 @@ export const installExtension = async (pkg: Package, ctx: vscode.ExtensionContex
 
     // Save the downloaded package to temp directory
     copiedExtensionPath = path.join(downloadDir, `${pkg.extension.id}-${pkg.extension.identity.version}.vsix`);
-    fs.writeFileSync(copiedExtensionPath, new Uint8Array(downloadedBuffer));
+    
+    try {
+      fs.writeFileSync(copiedExtensionPath, new Uint8Array(downloadedBuffer));
+      console.log(`Successfully saved downloaded package to: ${copiedExtensionPath}`);
+    } catch (writeError) {
+      console.error(`Failed to write downloaded package to disk:`, writeError);
+      await vscode.window.showErrorMessage(
+        `Failed to save ${pkg.extension.id}:v${pkg.extension.identity.version} to local temp directory`
+      );
+      return '';
+    }
   } else {
     // Local file installation (existing logic)
     if (!fs.existsSync(pkg.extension.extensionPath)) {
@@ -319,6 +350,18 @@ export const installExtension = async (pkg: Package, ctx: vscode.ExtensionContex
   }
 
   try {
+    // Validate the file exists and has content before attempting installation
+    if (!fs.existsSync(copiedExtensionPath)) {
+      throw new Error(`Extension file not found at: ${copiedExtensionPath}`);
+    }
+    
+    const stats = fs.statSync(copiedExtensionPath);
+    if (stats.size === 0) {
+      throw new Error(`Extension file is empty: ${copiedExtensionPath}`);
+    }
+    
+    console.log(`Installing extension from: ${copiedExtensionPath} (${stats.size} bytes)`);
+    
     // Install the extension
     await vscode.commands.executeCommand(CONSTANTS.vsCmdInstall, vscode.Uri.file(copiedExtensionPath));
 
@@ -355,19 +398,32 @@ async function downloadRemotePackage(url: string): Promise<Buffer | null> {
   try {
     let downloadUrl = url;
     
-    // Handle relative URLs from ProGet
-    if (url.startsWith('/')) {
-      // For relative URLs, we need to construct the full URL
-      // Default to localhost:8624 but this could be made configurable
-      downloadUrl = `http://localhost:8624${url}`;
+    // Validate URL format
+    if (!downloadUrl.startsWith('http://') && !downloadUrl.startsWith('https://')) {
+      throw new Error(`Invalid download URL: ${downloadUrl}. URL must be absolute (http:// or https://)`);
     }
+    
+    console.log(`Downloading package from: ${downloadUrl}`);
     
     const response = await fetch(downloadUrl);
     if (!response.ok) {
-      throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
+      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    }
+    
+    // Verify content type if available
+    const contentType = response.headers.get('content-type');
+    if (contentType && !contentType.includes('application/zip') && !contentType.includes('application/octet-stream')) {
+      console.warn(`Unexpected content-type: ${contentType}, proceeding anyway`);
     }
     
     const buffer = Buffer.from(await response.arrayBuffer());
+    
+    // Basic validation - check if it looks like a zip file
+    if (buffer.length < 4 || buffer.readUInt32LE(0) !== 0x04034b50) {
+      throw new Error('Downloaded content does not appear to be a valid zip file (missing zip signature)');
+    }
+    
+    console.log(`Successfully downloaded ${buffer.length} bytes`);
     return buffer;
   } catch (error) {
     console.error(`Error downloading package from ${url}:`, error);
