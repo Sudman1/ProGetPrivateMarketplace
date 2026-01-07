@@ -23,6 +23,8 @@ export class DetailsPanel {
 
     if (DetailsPanel.currentPanel) {
       DetailsPanel.currentPanel._panel.reveal(vscode.window?.activeTextEditor?.viewColumn);
+      // Update with current package state (including fresh installed version check)
+      DetailsPanel.currentPanel.update(pkg);
       return;
     }
 
@@ -39,6 +41,10 @@ export class DetailsPanel {
 
   public static revive(panel: vscode.WebviewPanel, uri: vscode.Uri) {
     DetailsPanel.currentPanel = new DetailsPanel(panel, uri);
+    // Initialize with current package data if available
+    if (DetailsPanel.currentPkg) {
+      DetailsPanel.currentPanel.update(DetailsPanel.currentPkg);
+    }
   }
 
   private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
@@ -81,7 +87,24 @@ export class DetailsPanel {
   public update(pkg: Package) {
     DetailsPanel.currentPkg = pkg;
     this._panel.title = pkg.extension.name;
+    
+    // Check current installed version in real-time
+    const currentInstalledVersion = this.getCurrentInstalledVersion(pkg.extension.metadata.identifier);
+    pkg.installedVersion = currentInstalledVersion;
+    
     this._panel.webview.html = this._getHtmlForWebView(this._panel.webview, pkg);
+  }
+
+  /**
+   * Gets the current installed version of an extension from VS Code
+   */
+  private getCurrentInstalledVersion(identifier: string): string {
+    const ext = vscode.extensions.getExtension(identifier);
+    if (!ext?.packageJSON) return '';
+    
+    // Safely extract version
+    const version = ext.packageJSON.version;
+    return typeof version === 'string' ? version : '';
   }
 
   private _getHtmlForWebView(webview: vscode.Webview, pkg: Package): string {

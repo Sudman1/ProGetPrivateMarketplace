@@ -172,6 +172,52 @@ const getExtensionsFromLocalDirectories = async (dirs: string[]): Promise<Extens
 };
 
 /**
+ * Downloads and inspects a VSIX package to get the correct extension identifier
+ * @param downloadUrl - The URL to download the VSIX package
+ * @param fallbackId - Fallback extension ID
+ * @param fallbackPublisher - Fallback publisher
+ * @returns The correct extension identifier (publisher.extensionId)
+ */
+async function getCorrectExtensionIdentifier(downloadUrl: string, fallbackId: string, fallbackPublisher: string): Promise<string> {
+  try {
+    console.log(`Downloading VSIX to extract correct identifier: ${downloadUrl}`);
+    
+    const buffer = await downloadRemotePackage(downloadUrl);
+    if (!buffer) {
+      console.warn('Failed to download VSIX package, using fallback identifier');
+      return `${fallbackPublisher.toLowerCase()}.${fallbackId.toLowerCase()}`;
+    }
+
+    const zip = new AdmZip(buffer);
+    const manifestContent = zip.readAsText('extension.vsixmanifest');
+    
+    if (!manifestContent) {
+      console.warn('No manifest found in VSIX, using fallback identifier');
+      return `${fallbackPublisher.toLowerCase()}.${fallbackId.toLowerCase()}`;
+    }
+
+    // Parse the manifest XML to extract the correct publisher and ID
+    const publisherMatch = manifestContent.match(/<Identity[^>]*Publisher="([^"]+)"/);
+    const idMatch = manifestContent.match(/<Identity[^>]*Id="([^"]+)"/);
+    
+    if (publisherMatch && idMatch) {
+      const actualPublisher = publisherMatch[1];
+      const actualId = idMatch[1];
+      const correctIdentifier = `${actualPublisher.toLowerCase()}.${actualId.toLowerCase()}`;
+      
+      console.log(`Extracted correct identifier: ${correctIdentifier} (was: ${fallbackPublisher.toLowerCase()}.${fallbackId.toLowerCase()})`);
+      return correctIdentifier;
+    } else {
+      console.warn('Could not parse manifest, using fallback identifier');
+      return `${fallbackPublisher.toLowerCase()}.${fallbackId.toLowerCase()}`;
+    }
+  } catch (error) {
+    console.error('Error extracting extension identifier:', error);
+    return `${fallbackPublisher.toLowerCase()}.${fallbackId.toLowerCase()}`;
+  }
+}
+
+/**
  * Gets extensions from a ProGet feed.
  * @param feedUrl - The ProGet feed URL.
  * @returns A promise resolving to an array of extensions.
@@ -222,7 +268,18 @@ const getExtensionsFromProGetFeed = async (feedUrl: string): Promise<Extension[]
       extension.metadata.description = pkg.description || '';
       extension.metadata.publisher = pkg.authors?.[0] || 'ProGet';
       extension.metadata.publishedAt = pkg.publishedAt ? new Date(pkg.publishedAt) : new Date();
-      extension.metadata.identifier = `${extension.metadata.publisher.toLowerCase()}.${extension.id.toLowerCase()}`;
+      
+      // Try to get the correct identifier by downloading and inspecting the VSIX
+      const correctIdentifier = await getCorrectExtensionIdentifier(downloadUrl, pkg.id, extension.metadata.publisher);
+      extension.metadata.identifier = correctIdentifier;
+      
+      // Update publisher and ID with correct values from the identifier
+      const identifierParts = correctIdentifier.split('.');
+      if (identifierParts.length === 2) {
+        extension.metadata.publisher = identifierParts[0];
+        extension.id = identifierParts[1];
+      }
+      
       extension.metadata.language = 'en-US';
       extension.metadata.categories = pkg.tags || [];
 
