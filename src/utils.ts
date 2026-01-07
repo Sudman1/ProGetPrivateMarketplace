@@ -184,7 +184,7 @@ const getExtensionsFromProGetFeed = async (feedUrl: string): Promise<Extension[]
     const packages = await progetService.fetchPackages();
 
     for (const pkg of packages) {
-      // Create an extension directly from the package since ProGet provides all info in one call
+      // Create an extension from the rich metadata provided by ProGet
       const extension = new Extension();
       
       // Basic information
@@ -194,8 +194,8 @@ const getExtensionsFromProGetFeed = async (feedUrl: string): Promise<Extension[]
 
       // Identity
       extension.identity.version = pkg.latestVersion || '1.0.0';
-      extension.identity.target = 'any'; // Default target
-      extension.identity.preRelease = false;
+      extension.identity.target = pkg.targetPlatform || 'any';
+      extension.identity.preRelease = false; // Could be enhanced to detect prerelease versions
       extension.identity.preview = false;
       extension.identity.engine = '*'; // Default engine
 
@@ -207,15 +207,37 @@ const getExtensionsFromProGetFeed = async (feedUrl: string): Promise<Extension[]
       extension.metadata.language = 'en-US';
       extension.metadata.categories = pkg.tags || [];
 
-      // Assets - Will be empty since we can't extract them without downloading
-      extension.assets.readme = 'Extension from ProGet feed. Download to view detailed information.';
+      // Assets - Use icon from ProGet if available
+      extension.assets.readme = pkg.description ? 
+        `# ${pkg.title || pkg.id}\n\n${pkg.description}\n\n**Publisher:** ${pkg.authors?.[0] || 'Unknown'}\n**Version:** ${pkg.latestVersion}\n**Downloads:** ${pkg.downloadCount || 0}${pkg.rating ? `\n**Rating:** ${pkg.rating} (${pkg.ratingCount || 0} reviews)` : ''}\n\nExtension loaded from ProGet feed.` :
+        'Extension from ProGet feed. Download to view detailed information.';
       extension.assets.changelog = '';
-      extension.assets.image = '';
+      
+      // Handle icon URL - convert relative URLs to absolute
+      if (pkg.iconUrl) {
+        if (pkg.iconUrl.startsWith('/')) {
+          // Relative URL - construct absolute URL
+          // Extract base URL (protocol + host + port) from feedUrl
+          try {
+            const feedUrlObj = new URL(feedUrl);
+            const baseUrl = `${feedUrlObj.protocol}//${feedUrlObj.host}`;
+            extension.assets.image = `${baseUrl}${pkg.iconUrl}`;
+          } catch {
+            // Fallback if URL parsing fails
+            const baseUrl = feedUrl.split('/vsix/')[0] || feedUrl.split('/feeds/')[0] || 'http://localhost:8624';
+            extension.assets.image = `${baseUrl}${pkg.iconUrl}`;
+          }
+        } else {
+          extension.assets.image = pkg.iconUrl;
+        }
+      } else {
+        extension.assets.image = '';
+      }
 
       // Links
       extension.links.getStarted = '';
       extension.links.learn = '';
-      extension.links.repository = pkg.projectUrl || '';
+      extension.links.repository = pkg.moreInfoUrl || pkg.projectUrl || '';
       extension.links.support = feedUrl;
 
       // Check if platform is compatible
@@ -334,11 +356,9 @@ async function downloadRemotePackage(url: string): Promise<Buffer | null> {
     let downloadUrl = url;
     
     // Handle relative URLs from ProGet
-    if (url.startsWith('/vsix/')) {
-      // Construct full URL - assume localhost:8624 as default
-      downloadUrl = `http://localhost:8624${url}`;
-    } else if (url.startsWith('/')) {
-      // Other relative URLs
+    if (url.startsWith('/')) {
+      // For relative URLs, we need to construct the full URL
+      // Default to localhost:8624 but this could be made configurable
       downloadUrl = `http://localhost:8624${url}`;
     }
     

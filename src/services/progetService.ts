@@ -63,26 +63,69 @@ export class ProGetService {
       const entryMatches = xmlText.match(/<entry>[\s\S]*?<\/entry>/g) || [];
 
       for (const entryXml of entryMatches) {
+        // Basic entry information
         const idMatch = entryXml.match(/<id>([^<]+)<\/id>/);
         const titleMatch = entryXml.match(/<title[^>]*>([^<]+)<\/title>/);
         const summaryMatch = entryXml.match(/<summary[^>]*>([^<]+)<\/summary>/);
-        const versionMatch = entryXml.match(/<Version>([^<]+)<\/Version>/);
-        const contentMatch = entryXml.match(/<content[^>]*src="([^"]+)"/);
+        const publishedMatch = entryXml.match(/<published>([^<]+)<\/published>/);
         const updatedMatch = entryXml.match(/<updated>([^<]+)<\/updated>/);
+        
+        // Author information
+        const authorMatch = entryXml.match(/<author>\s*<name>([^<]+)<\/name>\s*<\/author>/);
+        
+        // Links
+        const iconLinkMatch = entryXml.match(/<link rel="icon" href="([^"]+)"/);
+        const previewImageMatch = entryXml.match(/<link rel="previewimage" href="([^"]+)"/);
+        const contentMatch = entryXml.match(/<content[^>]*src="([^"]+)"/);
+        
+        // VSIX namespace elements (contain detailed metadata)
+
+        const versionMatch = entryXml.match(/<Version>([^<]+)<\/Version>/);
+        const downloadCountMatch = entryXml.match(/<DownloadCount>([^<]+)<\/DownloadCount>/);
+        const ratingMatch = entryXml.match(/<Rating[^>]*>([^<]+)<\/Rating>/);
+        const ratingCountMatch = entryXml.match(/<RatingCount[^>]*>([^<]+)<\/RatingCount>/);
+        
+        // Extract additional metadata that might be present
+        const displayNameMatch = entryXml.match(/<DisplayName>([^<]+)<\/DisplayName>/);
+        const publisherMatch = entryXml.match(/<Publisher>([^<]+)<\/Publisher>/);
+        const categoryMatch = entryXml.match(/<Categories>([^<]+)<\/Categories>/);
+        const tagsMatch = entryXml.match(/<Tags>([^<]+)<\/Tags>/);
+        const licenseMatch = entryXml.match(/<License>([^<]+)<\/License>/);
+        const moreInfoMatch = entryXml.match(/<MoreInfo>([^<]+)<\/MoreInfo>/);
+        const installationTargetMatch = entryXml.match(/<InstallationTarget[^>]*Id="([^"]+)"/);
 
         if (idMatch) {
           const id = idMatch[1];
           const downloadUrl = contentMatch?.[1];
+          const iconUrl = iconLinkMatch?.[1];
+          const previewImageUrl = previewImageMatch?.[1];
+          
+          // Parse categories and tags
+          const categories = categoryMatch?.[1]?.split(',').map(c => c.trim()).filter(c => c) || [];
+          const tags = tagsMatch?.[1]?.split(',').map(t => t.trim()).filter(t => t) || [];
+          
+          // Determine publisher - try multiple sources
+          const publisher = publisherMatch?.[1] || 
+                           (authorMatch?.[1] !== 'SYSTEM' ? authorMatch?.[1] : undefined) ||
+                           'Unknown';
 
           packages.push({
             id,
-            title: titleMatch?.[1] || id,
+            title: displayNameMatch?.[1] || titleMatch?.[1] || id,
             description: summaryMatch?.[1] || '',
-            authors: ['Unknown'],
-            tags: [],
+            authors: [publisher || 'Unknown'],
+            tags: [...categories, ...tags],
             latestVersion: versionMatch?.[1] || '1.0.0',
             downloadUrl: downloadUrl,
-            publishedAt: updatedMatch?.[1] || new Date().toISOString(),
+            publishedAt: publishedMatch?.[1] || updatedMatch?.[1] || new Date().toISOString(),
+            iconUrl: iconUrl,
+            previewImageUrl: previewImageUrl && previewImageUrl !== '' ? previewImageUrl : undefined,
+            downloadCount: downloadCountMatch?.[1] ? parseInt(downloadCountMatch[1]) : 0,
+            rating: ratingMatch?.[1] && ratingMatch[1] !== 'true' && ratingMatch[1] !== 'false' ? parseFloat(ratingMatch[1]) : undefined,
+            ratingCount: ratingCountMatch?.[1] && ratingCountMatch[1] !== 'true' && ratingCountMatch[1] !== 'false' ? parseInt(ratingCountMatch[1]) : undefined,
+            license: licenseMatch?.[1],
+            moreInfoUrl: moreInfoMatch?.[1],
+            targetPlatform: installationTargetMatch?.[1] || 'any',
           });
         }
       }
@@ -228,11 +271,17 @@ export interface ProGetPackage {
   tags?: string[];
   projectUrl?: string;
   iconUrl?: string;
+  previewImageUrl?: string;
   downloadCount?: number;
   totalDownloads?: number;
   latestVersion?: string;
   downloadUrl?: string;
   publishedAt?: string;
+  rating?: number;
+  ratingCount?: number;
+  license?: string;
+  moreInfoUrl?: string;
+  targetPlatform?: string;
 }
 
 /**
