@@ -77,8 +77,8 @@
         "icon": "$(folder)"
       },
       {
-        "command": "pvmp.addProGetFeed",
-        "title": "Add ProGet Feed",
+        "command": "pvmp.addAtomFeed",
+        "title": "Add Atom Feed",
         "icon": "$(globe)"
       },
       {
@@ -109,7 +109,7 @@
     "viewsWelcome": [
       {
         "view": "pvmp-extensions",
-        "contents": "No Extensions Found!\n[Add Directory Source](command:pvmp.addSource)\n[Add ProGet Feed](command:pvmp.addProGetFeed)"
+        "contents": "No Extensions Found!\n[Add Directory Source](command:pvmp.addSource)\n[Add Atom Feed](command:pvmp.addAtomFeed)"
       }
     ],
     "configuration": [
@@ -123,7 +123,7 @@
               "type": "string"
             },
             "order": 0,
-            "description": "List of extension sources. Can be local directory paths or ProGet feed URLs (e.g., http://localhost:8624/feeds/vscode-extensions)."
+            "description": "List of extension sources. Can be local directory paths or Atom feed URLs (e.g., http://localhost:8624/feeds/vscode-extensions/atom.xml)."
           }
         }
       },
@@ -174,7 +174,7 @@
           "group": "navigation"
         },
         {
-          "command": "pvmp.addProGetFeed",
+          "command": "pvmp.addAtomFeed",
           "when": "view == pvmp-extensions",
           "group": "navigation"
         },

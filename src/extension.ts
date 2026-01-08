@@ -216,9 +216,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage(`Updated Directory Sources`);
   });
 
-  const addProGetFeedCmd = vscode.commands.registerCommand(CONSTANTS.cmdAddProGetFeed, async () => {
+  const addAtomFeedCmd = vscode.commands.registerCommand(CONSTANTS.cmdAddAtomFeed, async () => {
     const feedUrl = await vscode.window.showInputBox({
-      prompt: 'Enter ProGet Atom Feed URL',
+      prompt: 'Enter Atom Feed URL',
       placeHolder: 'http://localhost:8624/vsix/vscode-extensions/atom.xml',
       validateInput: (value) => {
         if (!value) return 'URL is required';
@@ -237,7 +237,7 @@ export function activate(context: vscode.ExtensionContext) {
     const existingPaths: string[] = (await vscode.workspace.getConfiguration('')?.get(CONSTANTS.propSource)) || [];
     
     if (existingPaths.includes(feedUrl)) {
-      vscode.window.showWarningMessage('This ProGet feed is already configured');
+      vscode.window.showWarningMessage('This Atom feed is already configured');
       return;
     }
 
@@ -247,10 +247,10 @@ export function activate(context: vscode.ExtensionContext) {
       .getConfiguration('')
       .update(CONSTANTS.propSource, existingPaths, vscode.ConfigurationTarget.Global);
     extensionViewProvider.refresh();
-    vscode.window.showInformationMessage(`Added ProGet feed: ${feedUrl}`);
+    vscode.window.showInformationMessage(`Added Atom feed: ${feedUrl}`);
   });
 
-  context.subscriptions.push(addDirCmd, addProGetFeedCmd);
+  context.subscriptions.push(addDirCmd, addAtomFeedCmd);
 
   if (vscode.window.registerWebviewPanelSerializer) {
     vscode.window.registerWebviewPanelSerializer(CONSTANTS.extensionDetailsView, {

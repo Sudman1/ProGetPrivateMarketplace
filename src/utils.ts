@@ -7,7 +7,7 @@ import xml2js from 'xml2js';
 import { CONSTANTS } from './constants';
 import { Extension } from './models/extension';
 import { Package } from './models/package';
-import { ProGetService } from './services/progetService';
+import { AtomService } from './services/atomService';
 import { Manifest } from './types/XmlManifest';
 import { PackageJson } from './types/PackageJson';
 
@@ -92,7 +92,7 @@ export const getAllInstalledExtensions = (): Array<{
 
 /**
  * Gets the list of packages (collections of extensions) from sources.
- * @param sources - Array of sources (directory paths or ProGet feed URLs).
+ * @param sources - Array of sources (directory paths or Atom feed URLs).
  * @returns A promise resolving to an array of packages.
  */
 export const getPackages = async (sources: string[]): Promise<Package[]> => {
@@ -119,24 +119,24 @@ export const getPackages = async (sources: string[]): Promise<Package[]> => {
 };
 
 /**
- * Gets the list of extensions from sources (local directories and ProGet feeds).
- * @param sources - Array of sources (directory paths or ProGet feed URLs).
+ * Gets the list of extensions from sources (local directories and Atom feeds).
+ * @param sources - Array of sources (directory paths or Atom feed URLs).
  * @returns A promise resolving to an array of extensions.
  */
 const getExtensions = async (sources: string[]): Promise<Extension[]> => {
   const extensions: Extension[] = [];
   
-  // Separate local directories from ProGet feed URLs
-  const localDirs = sources.filter(source => !ProGetService.isProGetFeedUrl(source));
-  const feedUrls = sources.filter(source => ProGetService.isProGetFeedUrl(source));
+  // Separate local directories from Atom feed URLs
+  const localDirs = sources.filter(source => !AtomService.isAtomFeedUrl(source));
+  const feedUrls = sources.filter(source => AtomService.isAtomFeedUrl(source));
 
   // Process local directories (existing logic)
   const localExtensions = await getExtensionsFromLocalDirectories(localDirs);
   extensions.push(...localExtensions);
 
-  // Process ProGet feeds
+  // Process Atom feeds
   for (const feedUrl of feedUrls) {
-    const feedExtensions = await getExtensionsFromProGetFeed(feedUrl);
+    const feedExtensions = await getExtensionsFromAtomFeed(feedUrl);
     extensions.push(...feedExtensions);
   }
 
@@ -266,19 +266,19 @@ async function getCorrectExtensionIdentifier(downloadUrl: string, fallbackId: st
 }
 
 /**
- * Gets extensions from a ProGet feed.
- * @param atomFeedUrl - The ProGet atom feed URL.
+ * Gets extensions from an Atom feed.
+ * @param atomFeedUrl - The Atom feed URL.
  * @returns A promise resolving to an array of extensions.
  */
-const getExtensionsFromProGetFeed = async (atomFeedUrl: string): Promise<Extension[]> => {
+const getExtensionsFromAtomFeed = async (atomFeedUrl: string): Promise<Extension[]> => {
   const extensions: Extension[] = [];
   
   try {
-    const progetService = new ProGetService(atomFeedUrl);
-    const packages = await progetService.fetchPackages();
+    const atomService = new AtomService(atomFeedUrl);
+    const packages = await atomService.fetchPackages();
 
     for (const pkg of packages) {
-      // Create an extension from the rich metadata provided by ProGet
+      // Create an extension from the rich metadata provided by Atom
       const extension = new Extension();
       
       // Basic information
@@ -315,7 +315,7 @@ const getExtensionsFromProGetFeed = async (atomFeedUrl: string): Promise<Extensi
 
       // Metadata
       extension.metadata.description = pkg.description || '';
-      extension.metadata.publisher = pkg.authors?.[0] || 'ProGet';
+      extension.metadata.publisher = pkg.authors?.[0] || 'Atom';
       extension.metadata.publishedAt = pkg.publishedAt ? new Date(pkg.publishedAt) : new Date();
       
       // Try to get the correct identifier by downloading and inspecting the VSIX
@@ -332,10 +332,10 @@ const getExtensionsFromProGetFeed = async (atomFeedUrl: string): Promise<Extensi
       extension.metadata.language = 'en-US';
       extension.metadata.categories = pkg.tags || [];
 
-      // Assets - Use icon from ProGet if available
+      // Assets - Use icon from Atom if available
       extension.assets.readme = pkg.description ? 
-        `# ${pkg.title || pkg.id}\n\n${pkg.description}\n\n**Publisher:** ${pkg.authors?.[0] || 'Unknown'}\n**Version:** ${pkg.latestVersion}\n**Downloads:** ${pkg.downloadCount || 0}${pkg.rating ? `\n**Rating:** ${pkg.rating} (${pkg.ratingCount || 0} reviews)` : ''}\n\nExtension loaded from ProGet feed.` :
-        'Extension from ProGet feed. Download to view detailed information.';
+        `# ${pkg.title || pkg.id}\n\n${pkg.description}\n\n**Publisher:** ${pkg.authors?.[0] || 'Unknown'}\n**Version:** ${pkg.latestVersion}\n**Downloads:** ${pkg.downloadCount || 0}${pkg.rating ? `\n**Rating:** ${pkg.rating} (${pkg.ratingCount || 0} reviews)` : ''}\n\nExtension loaded from Atom feed.` :
+        'Extension from Atom feed. Download to view detailed information.';
       extension.assets.changelog = '';
       
       // Handle icon URL - convert relative URLs to absolute
@@ -373,8 +373,8 @@ const getExtensionsFromProGetFeed = async (atomFeedUrl: string): Promise<Extensi
       extensions.push(extension);
     }
   } catch (error) {
-    console.error(`Error fetching extensions from ProGet feed ${atomFeedUrl}:`, error);
-    vscode.window.showErrorMessage(`Failed to fetch extensions from ProGet feed: ${String(error)}`);
+    console.error(`Error fetching extensions from Atom feed ${atomFeedUrl}:`, error);
+    vscode.window.showErrorMessage(`Failed to fetch extensions from Atom feed: ${String(error)}`);  
   }
 
   return extensions;
@@ -429,12 +429,12 @@ export const installExtension = async (pkg: Package, ctx: vscode.ExtensionContex
   let copiedExtensionPath: string;
   let shouldCleanup = true;
 
-  // Check if this is a remote package (from ProGet feed)
-  if (ProGetService.isProGetFeedUrl(pkg.extension.extensionPath) || 
+  // Check if this is a remote package (from Atom feed)
+  if (AtomService.isAtomFeedUrl(pkg.extension.extensionPath) || 
       pkg.extension.extensionPath.startsWith('http')) {
     console.log(`Installing remote package: ${pkg.extension.id} from ${pkg.extension.extensionPath}`);
     
-    // Download the package from ProGet feed
+    // Download the package from Atom feed
     const downloadedBuffer = await downloadRemotePackage(pkg.extension.extensionPath);
     if (!downloadedBuffer) {
       await vscode.window.showErrorMessage(
@@ -572,9 +572,9 @@ export const batchUpdateExtensions = async (pkgs: Package[], ctx: vscode.Extensi
 
     try {
       // Check if this is a remote package
-      if (ProGetService.isProGetFeedUrl(pkg.extension.extensionPath) || 
+      if (AtomService.isAtomFeedUrl(pkg.extension.extensionPath) || 
           pkg.extension.extensionPath.startsWith('http')) {
-        // Download the package from ProGet feed
+        // Download the package from Atom feed
         const downloadedBuffer = await downloadRemotePackage(pkg.extension.extensionPath);
         if (!downloadedBuffer) {
           throw new Error('Failed to download remote package');

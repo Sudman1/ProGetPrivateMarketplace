@@ -2,13 +2,13 @@ import * as vscode from 'vscode';
 import { Extension } from '../models/extension';
 
 /**
- * Service for interacting with ProGet feeds to fetch VS Code extension packages
+ * Service for interacting with Atom feeds to fetch VS Code extension packages
  *
- * IMPORTANT: ProGet VSIX feeds are designed primarily for Visual Studio consumption
+ * IMPORTANT: Atom VSIX feeds are designed primarily for Visual Studio consumption
  * and do not provide documented REST APIs for programmatic package discovery.
  * This service provides a basic framework but may require manual package management.
  */
-export class ProGetService {
+export class AtomService {
   private readonly atomFeedUrl: string;
 
   constructor(atomFeedUrl: string) {
@@ -26,21 +26,21 @@ export class ProGetService {
   }
 
   /**
-   * Checks if a URL is a ProGet atom feed URL
+   * Checks if a URL is an atom feed URL
    * @param url - The URL to check
-   * @returns True if the URL appears to be a ProGet atom feed
+   * @returns True if the URL appears to be an atom feed
    */
-  static isProGetFeedUrl(url: string): boolean {
+  static isAtomFeedUrl(url: string): boolean {
     return url.toLowerCase().includes('atom.xml') || url.includes('/feeds/') || url.includes('/vsix/');
   }
 
   /**
-   * Fetches the list of packages from the ProGet atom feed
-   * @returns Promise resolving to an array of package metadata
+   * Fetches the list of packages from the atom feed
+   * @returns Promise resolving to an array of packages
    */
-  async fetchPackages(): Promise<ProGetPackage[]> {
+  async fetchPackages(): Promise<AtomPackage[]> {
     try {
-      console.log(`Fetching packages from ProGet atom feed: ${this.atomFeedUrl}`);
+      console.log(`Fetching packages from atom feed: ${this.atomFeedUrl}`);
       const response = await fetch(this.atomFeedUrl);
       if (!response.ok) {
         throw new Error(`Failed to fetch packages: ${response.status} ${response.statusText}`);
@@ -50,8 +50,8 @@ export class ProGetService {
       const packages = this.parsePackagesFromAtom(xmlText);
       return packages;
     } catch (error) {
-      console.error(`Error fetching packages from ProGet feed ${this.atomFeedUrl}:`, error);
-      vscode.window.showErrorMessage(`Failed to fetch packages from ProGet feed: ${String(error)}`);
+      console.error(`Error fetching packages from atom feed ${this.atomFeedUrl}:`, error);
+      vscode.window.showErrorMessage(`Failed to fetch packages from atom feed: ${String(error)}`);
       return [];
     }
   }
@@ -61,8 +61,8 @@ export class ProGetService {
    * @param xmlText - The Atom XML content
    * @returns Array of packages found
    */
-  private parsePackagesFromAtom(xmlText: string): ProGetPackage[] {
-    const packages: ProGetPackage[] = [];
+  private parsePackagesFromAtom(xmlText: string): AtomPackage[] {
+    const packages: AtomPackage[] = [];
 
     try {
       // Use regex parsing since DOMParser may not be available in all VS Code contexts
@@ -143,13 +143,13 @@ export class ProGetService {
   }
 
   /**
-   * This method is not supported for ProGet VSIX feeds
+   * This method is not supported for Atom VSIX feeds
    * @param packageId - The package identifier
    * @returns Empty array
    */
-  fetchPackageVersions(packageId: string): ProGetPackageVersion[] {
+  fetchPackageVersions(packageId: string): AtomPackageVersion[] {
     vscode.window.showWarningMessage(
-      `ProGet VSIX feeds require manual package discovery. Please browse to ${this.getBaseFeedUrl()}/${packageId} to view available versions.`
+      `Atom VSIX feeds require manual package discovery. Please browse to ${this.getBaseFeedUrl()}/${packageId} to view available versions.`
     );
     return [];
   }
@@ -179,7 +179,7 @@ export class ProGetService {
   }
 
   /**
-   * Creates a placeholder extension object for ProGet packages
+   * Creates a placeholder extension object for Atom packages
    * @param packageId - The package identifier
    * @param version - The package version
    * @returns Extension object
@@ -200,15 +200,15 @@ export class ProGetService {
     extension.identity.engine = '*';
 
     // Metadata
-    extension.metadata.description = `Extension from ProGet feed: ${this.getBaseFeedUrl()}`;
-    extension.metadata.publisher = 'ProGet';
+    extension.metadata.description = `Extension from Atom feed: ${this.getBaseFeedUrl()}`;
+    extension.metadata.publisher = 'Atom';
     extension.metadata.publishedAt = new Date();
-    extension.metadata.identifier = `proget.${packageId.toLowerCase()}`;
+    extension.metadata.identifier = `atom.${packageId.toLowerCase()}`;
     extension.metadata.language = 'en-US';
     extension.metadata.categories = [];
 
     // Assets
-    extension.assets.readme = 'This extension was loaded from a ProGet feed. Visit the feed URL for more information.';
+    extension.assets.readme = 'This extension was loaded from an Atom feed. Visit the feed URL for more information.';
     extension.assets.changelog = '';
     extension.assets.image = '';
 
@@ -222,34 +222,34 @@ export class ProGetService {
   }
 
   /**
-   * Converts a ProGet package to an Extension object
-   * @param progetPackage - The ProGet package metadata
-   * @param progetVersion - The specific version metadata
+   * Converts an Atom package to an Extension object
+   * @param atomPackage - The Atom package metadata
+   * @param atomVersion - The specific version metadata
    * @returns Extension object
    */
-  convertToExtension(progetPackage: ProGetPackage, progetVersion: ProGetPackageVersion): Extension {
+  convertToExtension(atomPackage: AtomPackage, atomVersion: AtomPackageVersion): Extension {
     const extension = new Extension();
 
     // Basic information
-    extension.id = progetPackage.id;
-    extension.name = progetPackage.title || progetPackage.id;
+    extension.id = atomPackage.id;
+    extension.name = atomPackage.title || atomPackage.id;
     extension.extensionPath =
-      progetVersion.downloadUrl || `${this.getBaseFeedUrl()}/download/${progetPackage.id}/${progetVersion.version}`;
+      atomVersion.downloadUrl || `${this.getBaseFeedUrl()}/download/${atomPackage.id}/${atomVersion.version}`;
 
     // Identity
-    extension.identity.version = progetVersion.version;
+    extension.identity.version = atomVersion.version;
     extension.identity.target = 'any';
     extension.identity.preRelease = false;
     extension.identity.preview = false;
     extension.identity.engine = '*';
 
     // Metadata
-    extension.metadata.description = progetPackage.description || '';
-    extension.metadata.publisher = progetPackage.authors?.[0] || 'ProGet';
-    extension.metadata.publishedAt = new Date(progetVersion.published || Date.now());
+    extension.metadata.description = atomPackage.description || '';
+    extension.metadata.publisher = atomPackage.authors?.[0] || 'Atom';
+    extension.metadata.publishedAt = new Date(atomVersion.published || Date.now());
     extension.metadata.identifier = `${extension.metadata.publisher.toLowerCase()}.${extension.id.toLowerCase()}`;
     extension.metadata.language = 'en-US';
-    extension.metadata.categories = progetPackage.tags || [];
+    extension.metadata.categories = atomPackage.tags || [];
 
     // Assets
     extension.assets.readme = '';
@@ -259,7 +259,7 @@ export class ProGetService {
     // Links
     extension.links.getStarted = '';
     extension.links.learn = '';
-    extension.links.repository = progetPackage.projectUrl || '';
+    extension.links.repository = atomPackage.projectUrl || '';
     extension.links.support = '';
 
     return extension;
@@ -267,9 +267,9 @@ export class ProGetService {
 }
 
 /**
- * Interface representing a package from ProGet
+ * Interface representing a package from Atom feeds
  */
-export interface ProGetPackage {
+export interface AtomPackage {
   id: string;
   title?: string;
   description?: string;
@@ -291,9 +291,9 @@ export interface ProGetPackage {
 }
 
 /**
- * Interface representing a package version from ProGet
+ * Interface representing a package version from Atom feeds
  */
-export interface ProGetPackageVersion {
+export interface AtomPackageVersion {
   version: string;
   published?: string;
   downloadCount?: number;

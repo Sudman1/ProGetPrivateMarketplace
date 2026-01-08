@@ -2,7 +2,7 @@ export const CONSTANTS = {
   vsCmdInstall: 'workbench.extensions.installExtension',
   vsCmdUninstall: 'workbench.extensions.uninstallExtension',
   cmdAddSource: 'pvmp.addSource',
-  cmdAddProGetFeed: 'pvmp.addProGetFeed',
+  cmdAddAtomFeed: 'pvmp.addAtomFeed',
   propSource: 'privateMarketplace.Source',
   propCheckUpdate: 'privateMarketplace.checkUpdate',
   propAutoUpdate: 'privateMarketplace.autoUpdate',

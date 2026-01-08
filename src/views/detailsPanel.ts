@@ -1,9 +1,11 @@
 import markdownit from 'markdown-it';
 import * as vscode from 'vscode';
+import * as path from 'path';
 
 import { CONSTANTS } from '../constants';
 import { Package } from '../models/package';
 import { getAllInstalledExtensions, getWebviewOptions } from '../utils';
+import { AtomService } from '../services/atomService';
 
 type WebViewMessage = {
   command: string;
@@ -298,6 +300,10 @@ export class DetailsPanel {
                     <td>Platform</td>
                     <td>${pkg.extension.identity.target}</td>
                   </tr>
+                  <tr>
+                    <td>Package Source</td>
+                    <td class="package-source" title="${ext.extensionPath}">${this.formatPackageSource(ext.extensionPath)}</td>
+                  </tr>
                 </table>
               </div>
             </div>
@@ -305,6 +311,27 @@ export class DetailsPanel {
           <script nonce="${nonce}" src="${webviewScript.toString()}" type="module"></script>
         </body>
       </html>`;
+  }
+
+  /**
+   * Formats the package source for display
+   * @param extensionPath The extension path or URL
+   * @returns Formatted source string
+   */
+  private formatPackageSource(extensionPath: string): string {
+    if (AtomService.isAtomFeedUrl(extensionPath) || extensionPath.startsWith('http')) {
+      // For Atom feed URLs, extract the base URL for cleaner display
+      try {
+        const url = new URL(extensionPath);
+        return `Atom Feed (${url.host})`;
+      } catch {
+        return 'Atom Feed';
+      }
+    } else {
+      // For local paths, show the directory name
+      const dirName = path.basename(path.dirname(extensionPath));
+      return `Local Directory (${dirName})`;
+    }
   }
 
   public dispose() {

@@ -112,6 +112,13 @@ body {
   border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
 }
 
+.info .more-info table td.package-source {
+  word-break: break-word;
+  max-width: 300px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+}
+
 .resources div {
   display: flex;
   flex-direction: column;
