@@ -267,14 +267,14 @@ async function getCorrectExtensionIdentifier(downloadUrl: string, fallbackId: st
 
 /**
  * Gets extensions from a ProGet feed.
- * @param feedUrl - The ProGet feed URL.
+ * @param atomFeedUrl - The ProGet atom feed URL.
  * @returns A promise resolving to an array of extensions.
  */
-const getExtensionsFromProGetFeed = async (feedUrl: string): Promise<Extension[]> => {
+const getExtensionsFromProGetFeed = async (atomFeedUrl: string): Promise<Extension[]> => {
   const extensions: Extension[] = [];
   
   try {
-    const progetService = new ProGetService(feedUrl);
+    const progetService = new ProGetService(atomFeedUrl);
     const packages = await progetService.fetchPackages();
 
     for (const pkg of packages) {
@@ -288,18 +288,19 @@ const getExtensionsFromProGetFeed = async (feedUrl: string): Promise<Extension[]
       // Construct proper download URL
       let downloadUrl = pkg.downloadUrl;
       if (!downloadUrl) {
-        // Fallback to constructed download URL
-        downloadUrl = `${feedUrl}/download/${encodeURIComponent(pkg.id)}/${encodeURIComponent(pkg.latestVersion || '1.0.0')}`;
+        // If no direct download URL, we can't proceed
+        console.warn(`No download URL found for package: ${pkg.id}`);
+        continue;
       } else if (downloadUrl.startsWith('/')) {
         // Convert relative URL to absolute
         try {
-          const feedUrlObj = new URL(feedUrl);
-          const baseUrl = `${feedUrlObj.protocol}//${feedUrlObj.host}`;
+          const atomFeedUrlObj = new URL(atomFeedUrl);
+          const baseUrl = `${atomFeedUrlObj.protocol}//${atomFeedUrlObj.host}`;
           downloadUrl = `${baseUrl}${downloadUrl}`;
         } catch {
           // Fallback if URL parsing fails
-          const baseUrl = feedUrl.split('/vsix/')[0] || feedUrl.split('/feeds/')[0] || 'http://localhost:8624';
-          downloadUrl = `${baseUrl}${downloadUrl}`;
+          console.warn(`Could not resolve relative URL for package: ${pkg.id}`);
+          continue;
         }
       }
       
@@ -341,15 +342,15 @@ const getExtensionsFromProGetFeed = async (feedUrl: string): Promise<Extension[]
       if (pkg.iconUrl) {
         if (pkg.iconUrl.startsWith('/')) {
           // Relative URL - construct absolute URL
-          // Extract base URL (protocol + host + port) from feedUrl
+          // Extract base URL (protocol + host + port) from atomFeedUrl
           try {
-            const feedUrlObj = new URL(feedUrl);
-            const baseUrl = `${feedUrlObj.protocol}//${feedUrlObj.host}`;
+            const atomFeedUrlObj = new URL(atomFeedUrl);
+            const baseUrl = `${atomFeedUrlObj.protocol}//${atomFeedUrlObj.host}`;
             extension.assets.image = `${baseUrl}${pkg.iconUrl}`;
           } catch {
-            // Fallback if URL parsing fails
-            const baseUrl = feedUrl.split('/vsix/')[0] || feedUrl.split('/feeds/')[0] || 'http://localhost:8624';
-            extension.assets.image = `${baseUrl}${pkg.iconUrl}`;
+            // Fallback if URL parsing fails - derive from atom feed URL
+            const basePath = atomFeedUrl.replace(/\/atom\.xml.*$/, '');
+            extension.assets.image = `${basePath}${pkg.iconUrl}`;
           }
         } else {
           extension.assets.image = pkg.iconUrl;
@@ -362,7 +363,9 @@ const getExtensionsFromProGetFeed = async (feedUrl: string): Promise<Extension[]
       extension.links.getStarted = '';
       extension.links.learn = '';
       extension.links.repository = pkg.moreInfoUrl || pkg.projectUrl || '';
-      extension.links.support = feedUrl;
+      // Use base feed URL for support link
+      const basePath = atomFeedUrl.replace(/\/atom\.xml.*$/, '');
+      extension.links.support = basePath;
 
       // Check if platform is compatible
       if (!isCompatibleTarget(extension.identity.target)) continue;
@@ -370,7 +373,7 @@ const getExtensionsFromProGetFeed = async (feedUrl: string): Promise<Extension[]
       extensions.push(extension);
     }
   } catch (error) {
-    console.error(`Error fetching extensions from ProGet feed ${feedUrl}:`, error);
+    console.error(`Error fetching extensions from ProGet feed ${atomFeedUrl}:`, error);
     vscode.window.showErrorMessage(`Failed to fetch extensions from ProGet feed: ${String(error)}`);
   }
 

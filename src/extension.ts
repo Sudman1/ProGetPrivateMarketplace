@@ -218,12 +218,15 @@ export function activate(context: vscode.ExtensionContext) {
 
   const addProGetFeedCmd = vscode.commands.registerCommand(CONSTANTS.cmdAddProGetFeed, async () => {
     const feedUrl = await vscode.window.showInputBox({
-      prompt: 'Enter ProGet Feed URL',
-      placeHolder: 'http://localhost:8624/feeds/vscode-extensions',
+      prompt: 'Enter ProGet Atom Feed URL',
+      placeHolder: 'http://localhost:8624/vsix/vscode-extensions/atom.xml',
       validateInput: (value) => {
         if (!value) return 'URL is required';
         if (!value.startsWith('http://') && !value.startsWith('https://')) {
           return 'URL must start with http:// or https://';
+        }
+        if (!value.toLowerCase().includes('atom.xml')) {
+          return 'URL should point to an atom.xml feed (e.g., .../atom.xml)';
         }
         return null;
       }

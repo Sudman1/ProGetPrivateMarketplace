@@ -9,33 +9,39 @@ import { Extension } from '../models/extension';
  * This service provides a basic framework but may require manual package management.
  */
 export class ProGetService {
-  private readonly feedUrl: string;
+  private readonly atomFeedUrl: string;
 
-  constructor(feedUrl: string) {
-    this.feedUrl = feedUrl.replace(/\/$/, ''); // Remove trailing slash
-    // Convert feeds URL to vsix API URL if needed
-    if (this.feedUrl.includes('/feeds/')) {
-      this.feedUrl = this.feedUrl.replace('/feeds/', '/vsix/');
-    }
+  constructor(atomFeedUrl: string) {
+    this.atomFeedUrl = atomFeedUrl;
   }
 
   /**
-   * Checks if a URL is a ProGet feed URL
+   * Derives the base feed URL from the atom feed URL
+   * @returns The base feed URL for download operations
+   */
+  private getBaseFeedUrl(): string {
+    // Convert atom.xml URL back to base feed URL
+    // e.g., http://localhost:8624/vsix/vscode-extensions/atom.xml -> http://localhost:8624/vsix/vscode-extensions
+    return this.atomFeedUrl.replace('/atom.xml', '');
+  }
+
+  /**
+   * Checks if a URL is a ProGet atom feed URL
    * @param url - The URL to check
-   * @returns True if the URL appears to be a ProGet feed
+   * @returns True if the URL appears to be a ProGet atom feed
    */
   static isProGetFeedUrl(url: string): boolean {
-    return url.startsWith('http://') || url.startsWith('https://');
+    return url.toLowerCase().includes('atom.xml') || url.includes('/feeds/') || url.includes('/vsix/');
   }
 
   /**
-   * Fetches the list of packages from the ProGet feed using Atom XML
+   * Fetches the list of packages from the ProGet atom feed
    * @returns Promise resolving to an array of package metadata
    */
   async fetchPackages(): Promise<ProGetPackage[]> {
     try {
-      const atomUrl = `${this.feedUrl}/atom.xml`;
-      const response = await fetch(atomUrl);
+      console.log(`Fetching packages from ProGet atom feed: ${this.atomFeedUrl}`);
+      const response = await fetch(this.atomFeedUrl);
       if (!response.ok) {
         throw new Error(`Failed to fetch packages: ${response.status} ${response.statusText}`);
       }
@@ -44,7 +50,7 @@ export class ProGetService {
       const packages = this.parsePackagesFromAtom(xmlText);
       return packages;
     } catch (error) {
-      console.error(`Error fetching packages from ProGet feed ${this.feedUrl}:`, error);
+      console.error(`Error fetching packages from ProGet feed ${this.atomFeedUrl}:`, error);
       vscode.window.showErrorMessage(`Failed to fetch packages from ProGet feed: ${String(error)}`);
       return [];
     }
@@ -143,7 +149,7 @@ export class ProGetService {
    */
   fetchPackageVersions(packageId: string): ProGetPackageVersion[] {
     vscode.window.showWarningMessage(
-      `ProGet VSIX feeds require manual package discovery. Please browse to ${this.feedUrl}/${packageId} to view available versions.`
+      `ProGet VSIX feeds require manual package discovery. Please browse to ${this.getBaseFeedUrl()}/${packageId} to view available versions.`
     );
     return [];
   }
@@ -156,7 +162,7 @@ export class ProGetService {
    */
   async downloadPackage(packageId: string, version: string): Promise<Buffer | null> {
     try {
-      const downloadUrl = `${this.feedUrl}/download/${encodeURIComponent(packageId)}/${encodeURIComponent(version)}`;
+      const downloadUrl = `${this.getBaseFeedUrl()}/download/${encodeURIComponent(packageId)}/${encodeURIComponent(version)}`;
       const response = await fetch(downloadUrl);
 
       if (!response.ok) {
@@ -184,7 +190,7 @@ export class ProGetService {
     // Basic information
     extension.id = packageId;
     extension.name = packageId;
-    extension.extensionPath = `${this.feedUrl}/download/${packageId}/${version}`;
+    extension.extensionPath = `${this.getBaseFeedUrl()}/download/${packageId}/${version}`;
 
     // Identity
     extension.identity.version = version;
@@ -194,7 +200,7 @@ export class ProGetService {
     extension.identity.engine = '*';
 
     // Metadata
-    extension.metadata.description = `Extension from ProGet feed: ${this.feedUrl}`;
+    extension.metadata.description = `Extension from ProGet feed: ${this.getBaseFeedUrl()}`;
     extension.metadata.publisher = 'ProGet';
     extension.metadata.publishedAt = new Date();
     extension.metadata.identifier = `proget.${packageId.toLowerCase()}`;
@@ -210,7 +216,7 @@ export class ProGetService {
     extension.links.getStarted = '';
     extension.links.learn = '';
     extension.links.repository = '';
-    extension.links.support = this.feedUrl;
+    extension.links.support = this.getBaseFeedUrl();
 
     return extension;
   }
@@ -228,7 +234,7 @@ export class ProGetService {
     extension.id = progetPackage.id;
     extension.name = progetPackage.title || progetPackage.id;
     extension.extensionPath =
-      progetVersion.downloadUrl || `${this.feedUrl}/download/${progetPackage.id}/${progetVersion.version}`;
+      progetVersion.downloadUrl || `${this.getBaseFeedUrl()}/download/${progetPackage.id}/${progetVersion.version}`;
 
     // Identity
     extension.identity.version = progetVersion.version;
