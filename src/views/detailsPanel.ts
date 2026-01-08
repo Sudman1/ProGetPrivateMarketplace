@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 
 import { CONSTANTS } from '../constants';
 import { Package } from '../models/package';
-import { getWebviewOptions } from '../utils';
+import { getAllInstalledExtensions, getWebviewOptions } from '../utils';
 
 type WebViewMessage = {
   command: string;
@@ -17,6 +17,13 @@ export class DetailsPanel {
   private readonly _panel: vscode.WebviewPanel;
   private readonly _extensionUri: vscode.Uri;
   private _disposables: vscode.Disposable[] = [];
+
+  /**
+   * Checks if the details panel is currently showing the specified package
+   */
+  public static isShowingPackage(pkg: Package): boolean {
+    return DetailsPanel.currentPkg?.id === pkg.id;
+  }
 
   public static show(pkg: Package, extensionUri: vscode.Uri) {
     DetailsPanel.currentPkg = pkg;
@@ -88,11 +95,80 @@ export class DetailsPanel {
     DetailsPanel.currentPkg = pkg;
     this._panel.title = pkg.extension.name;
     
-    // Check current installed version in real-time
-    const currentInstalledVersion = this.getCurrentInstalledVersion(pkg.extension.metadata.identifier);
-    pkg.installedVersion = currentInstalledVersion;
+    // Get all installed extensions and check for matches
+    const installedExtensions = getAllInstalledExtensions();
+    const matchingExtension = this.findMatchingInstalledExtension(pkg, installedExtensions);
+    
+    if (matchingExtension) {
+      pkg.installedVersion = matchingExtension.version;
+      // Update the package metadata with the correct identifier for future operations
+      pkg.extension.metadata.identifier = matchingExtension.identifier;
+      pkg.extension.metadata.publisher = matchingExtension.publisher;
+      console.log(`Found installed extension: ${matchingExtension.identifier} v${matchingExtension.version}`);
+    } else {
+      pkg.installedVersion = '';
+    }
     
     this._panel.webview.html = this._getHtmlForWebView(this._panel.webview, pkg);
+  }
+
+  /**
+   * Directly updates the install status without re-checking VS Code's extension registry
+   * Used when we know for certain an extension was just installed/uninstalled
+   */
+  public updateInstallStatus(pkg: Package, installed: boolean, version: string = '') {
+    DetailsPanel.currentPkg = pkg;
+    
+    // Directly set the install status without checking VS Code's registry
+    if (installed) {
+      pkg.installedVersion = version;
+      console.log(`Details panel: Set as installed v${version}`);
+    } else {
+      pkg.installedVersion = '';
+      pkg.extension.metadata.identifier = '';
+      console.log(`Details panel: Set as uninstalled`);
+    }
+    
+    // Update the webview with the new status
+    this._panel.webview.html = this._getHtmlForWebView(this._panel.webview, pkg);
+  }
+
+  /**
+   * Finds a matching installed extension for the given package
+   */
+  private findMatchingInstalledExtension(pkg: Package, installedExtensions: Array<{publisher: string, name: string, version: string, identifier: string}>) {
+    const packageName = pkg.extension.name.toLowerCase();
+    const packageId = pkg.extension.id.toLowerCase();
+    
+    // Try multiple matching strategies
+    for (const installed of installedExtensions) {
+      const installedName = installed.name.toLowerCase();
+      
+      // Strategy 1: Direct name match
+      if (packageName === installedName) {
+        return installed;
+      }
+      
+      // Strategy 2: Package ID matches extension name
+      if (packageId === installedName) {
+        return installed;
+      }
+      
+      // Strategy 3: Check if package name contains the extension name (or vice versa)
+      if (packageName.includes(installedName) || installedName.includes(packageName)) {
+        return installed;
+      }
+      
+      // Strategy 4: Remove common prefixes/suffixes and compare
+      const cleanPackageName = packageName.replace(/[-_](vscode|extension|ext)$/, '').replace(/^(vscode|ext)[-_]/, '');
+      const cleanInstalledName = installedName.replace(/[-_](vscode|extension|ext)$/, '').replace(/^(vscode|ext)[-_]/, '');
+      
+      if (cleanPackageName === cleanInstalledName) {
+        return installed;
+      }
+    }
+    
+    return null;
   }
 
   /**

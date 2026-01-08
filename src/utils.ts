@@ -43,6 +43,54 @@ const getExtensionPathsRecursively = (dir: string, depth: number, extensionPaths
 };
 
 /**
+ * Gets all currently installed VS Code extensions with their metadata
+ * @returns Array of installed extension information
+ */
+export const getAllInstalledExtensions = (): Array<{
+  publisher: string;
+  name: string;
+  version: string;
+  identifier: string;
+}> => {
+  const installedExtensions: Array<{
+    publisher: string;
+    name: string;
+    version: string;
+    identifier: string;
+  }> = [];
+
+  // Get all installed extensions from VS Code
+  const extensions = vscode.extensions.all;
+
+  for (const extension of extensions) {
+    // Skip built-in VS Code extensions (they start with vscode.)
+    if (extension.id.startsWith('vscode.')) {
+      continue;
+    }
+
+    // Extract metadata safely
+    const packageJson = extension.packageJSON as Record<string, unknown>;
+    
+    if (packageJson && typeof packageJson === 'object') {
+      const name = typeof packageJson.name === 'string' ? packageJson.name : '';
+      const publisher = typeof packageJson.publisher === 'string' ? packageJson.publisher : '';
+      const version = typeof packageJson.version === 'string' ? packageJson.version : '';
+      
+      if (name && publisher && version) {
+        installedExtensions.push({
+          publisher,
+          name,
+          version,
+          identifier: extension.id
+        });
+      }
+    }
+  }
+
+  return installedExtensions;
+};
+
+/**
  * Gets the list of packages (collections of extensions) from sources.
  * @param sources - Array of sources (directory paths or ProGet feed URLs).
  * @returns A promise resolving to an array of packages.
@@ -453,7 +501,7 @@ export const installExtension = async (pkg: Package, ctx: vscode.ExtensionContex
  */
 async function downloadRemotePackage(url: string): Promise<Buffer | null> {
   try {
-    let downloadUrl = url;
+    const downloadUrl = url;
     
     // Validate URL format
     if (!downloadUrl.startsWith('http://') && !downloadUrl.startsWith('https://')) {
@@ -555,12 +603,36 @@ export const batchUpdateExtensions = async (pkgs: Package[], ctx: vscode.Extensi
  */
 export const uninstallExtension = async (pkg: Package): Promise<boolean> => {
   try {
+    // Try to get the best identifier for uninstalling
+    let identifier = pkg.extension.metadata.identifier;
+    
+    // If no identifier is set, try to construct one or find from installed extensions
+    if (!identifier) {
+      const allInstalled = getAllInstalledExtensions();
+      const found = allInstalled.find(ext => 
+        ext.name?.toLowerCase() === pkg.id.toLowerCase() ||
+        ext.identifier.toLowerCase().endsWith(`.${pkg.id.toLowerCase()}`)
+      );
+      
+      if (found) {
+        identifier = found.identifier;
+        console.log(`Found identifier for uninstall: ${identifier}`);
+      } else {
+        // Fallback to constructed identifier
+        identifier = `${pkg.extension.metadata.publisher || 'unknown'}.${pkg.id}`;
+        console.log(`Using fallback identifier: ${identifier}`);
+      }
+    }
+    
+    console.log(`Attempting to uninstall with identifier: ${identifier}`);
+    
     // Uninstall the extension
-    await vscode.commands.executeCommand(CONSTANTS.vsCmdUninstall, pkg.extension.metadata.identifier);
+    await vscode.commands.executeCommand(CONSTANTS.vsCmdUninstall, identifier);
 
     vscode.window.showInformationMessage(`Successfully uninstalled ${pkg.extension.id}:v${pkg.installedVersion}`);
     return true;
   } catch (err) {
+    console.error(`Uninstall error for ${pkg.id}:`, err);
     await vscode.window.showErrorMessage(
       `Failed to uninstall ${pkg.extension.id}:v${pkg.installedVersion} with error ${String(err)}`
     );
