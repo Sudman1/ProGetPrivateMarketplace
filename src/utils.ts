@@ -409,6 +409,19 @@ const getExtensionInstalledVersion = (identifier: string): string => {
  * @returns A promise resolving to the installed version of the extension.
  */
 export const installExtension = async (pkg: Package, ctx: vscode.ExtensionContext): Promise<string> => {
+  // Add safety checks
+  if (!pkg || !pkg.extension) {
+    console.error('installExtension: Package or extension is undefined');
+    vscode.window.showErrorMessage('Invalid package data for installation');
+    return '';
+  }
+
+  if (!pkg.extension.extensionPath) {
+    console.error('installExtension: Extension path is undefined');
+    vscode.window.showErrorMessage(`No extension path found for ${pkg.extension.id || 'unknown'}`);
+    return '';
+  }
+
   const downloadDir = downloadDirectoryExists(ctx);
   let copiedExtensionPath: string;
   let shouldCleanup = true;

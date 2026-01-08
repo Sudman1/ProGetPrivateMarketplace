@@ -75,69 +75,122 @@ export function activate(context: vscode.ExtensionContext) {
     // The dirty flag system will automatically update the tree node - no window reload needed
   });
 
-  vscode.commands.registerCommand(CONSTANTS.cmdInstall, async (pkg: Package) => {
-    console.log(`Starting install for: ${pkg.id}`);
+  vscode.commands.registerCommand(CONSTANTS.cmdInstall, async (param: any) => {
+    console.log(`Starting install for: ${param?.id}`);
     
-    const installedVersion = await installExtension(pkg, context);
-    if (installedVersion) {
-      console.log(`Install succeeded for: ${pkg.id}, updating tree and details immediately`);
+    try {
+      let pkg: Package;
       
-      // Update package state
-      pkg.installedVersion = installedVersion;
-      
-      // Update tree node immediately
-      const node = extensionViewProvider.getCachedNode(pkg.id);
-      if (node) {
-        console.log(`Found cached node, updating to installed state`);
-        node.package.installedVersion = installedVersion;
-        node.updateDisplay();
-        
-        // Fire change event for just this node
-        extensionViewProvider.fireNodeChange(node);
+      // Check if this is a TreeNode (from tree view) or Package (from details panel)
+      if (param?.package) {
+        // This is a TreeNode from tree view
+        console.log('Received TreeNode from tree view');
+        pkg = param.package;
+      } else if (param?.extension) {
+        // This is a Package from details panel
+        console.log('Received Package from details panel');
+        pkg = param;
       } else {
-        console.log(`No cached node found, doing full refresh`);
-        extensionViewProvider.refresh();
+        console.error('Install command received invalid parameter');
+        vscode.window.showErrorMessage('Invalid data for installation');
+        return;
       }
       
-      // Update details panel immediately with known install status
-      if (DetailsPanel.currentPanel && DetailsPanel.isShowingPackage(pkg)) {
-        console.log(`Updating details panel for installed: ${pkg.id}`);
-        DetailsPanel.currentPanel.updateInstallStatus(pkg, true, installedVersion);
+      console.log('Package exists:', !!pkg);
+      console.log('Package.extension exists:', !!pkg?.extension);
+      console.log('Package.extension.extensionPath:', pkg?.extension?.extensionPath);
+      
+      console.log('About to call installExtension...');
+      const installedVersion = await installExtension(pkg, context);
+      console.log('installExtension returned:', installedVersion);
+      
+      if (installedVersion) {
+        console.log(`Install succeeded for: ${pkg.id}, updating tree and details immediately`);
+        
+        // Update package state
+        pkg.installedVersion = installedVersion;
+        
+        // Update tree node immediately
+        const node = extensionViewProvider.getCachedNode(pkg.id);
+        if (node) {
+          console.log(`Found cached node, updating to installed state`);
+          node.package.installedVersion = installedVersion;
+          node.updateDisplay();
+          
+          // Fire change event for just this node
+          extensionViewProvider.fireNodeChange(node);
+        } else {
+          console.log(`No cached node found, doing full refresh`);
+          extensionViewProvider.refresh();
+        }
+        
+        // Update details panel immediately with known install status
+        if (DetailsPanel.currentPanel && DetailsPanel.isShowingPackage(pkg)) {
+          console.log(`Updating details panel for installed: ${pkg.id}`);
+          DetailsPanel.currentPanel.updateInstallStatus(pkg, true, installedVersion);
+        }
       }
+    } catch (error) {
+      console.error('Error in install command:', error);
+      vscode.window.showErrorMessage(`Install failed: ${error}`);
     }
   });
 
-  vscode.commands.registerCommand(CONSTANTS.cmdUninstall, async (pkg: Package) => {
-    console.log(`Starting uninstall for: ${pkg.id}`);
+  vscode.commands.registerCommand(CONSTANTS.cmdUninstall, async (param: any) => {
+    console.log(`Starting uninstall for: ${param?.id}`);
     
-    const uninstalled = await uninstallExtension(pkg);
-    if (uninstalled) {
-      console.log(`Uninstall succeeded for: ${pkg.id}, updating tree immediately`);
+    try {
+      let pkg: Package;
       
-      // Update the package object state immediately
-      pkg.installedVersion = '';
-      pkg.extension.metadata.identifier = '';
-      
-      // Since we know uninstall succeeded, immediately update the tree node
-      const node = extensionViewProvider.getCachedNode(pkg.id);
-      if (node) {
-        console.log(`Found cached node, updating to uninstalled state`);
-        node.package.installedVersion = '';
-        node.package.extension.metadata.identifier = '';
-        node.updateDisplay();
-        
-        // Fire change event for just this node
-        extensionViewProvider.fireNodeChange(node);
+      // Check if this is a TreeNode (from tree view) or Package (from details panel)
+      if (param?.package) {
+        // This is a TreeNode from tree view
+        console.log('Received TreeNode from tree view');
+        pkg = param.package;
+      } else if (param?.extension) {
+        // This is a Package from details panel
+        console.log('Received Package from details panel');
+        pkg = param;
       } else {
-        console.log(`No cached node found, doing full refresh`);
-        extensionViewProvider.refresh();
+        console.error('Uninstall command received invalid parameter');
+        vscode.window.showErrorMessage('Invalid data for uninstallation');
+        return;
       }
       
-      // Update details panel immediately too (direct status update)
-      if (DetailsPanel.currentPanel && DetailsPanel.isShowingPackage(pkg)) {
-        console.log(`Updating details panel for uninstalled: ${pkg.id}`);
-        DetailsPanel.currentPanel.updateInstallStatus(pkg, false);
+      console.log('About to call uninstallExtension...');
+      const uninstalled = await uninstallExtension(pkg);
+      
+      if (uninstalled) {
+        console.log(`Uninstall succeeded for: ${pkg.id}, updating tree immediately`);
+        
+        // Update the package object state immediately
+        pkg.installedVersion = '';
+        pkg.extension.metadata.identifier = '';
+        
+        // Since we know uninstall succeeded, immediately update the tree node
+        const node = extensionViewProvider.getCachedNode(pkg.id);
+        if (node) {
+          console.log(`Found cached node, updating to uninstalled state`);
+          node.package.installedVersion = '';
+          node.package.extension.metadata.identifier = '';
+          node.updateDisplay();
+          
+          // Fire change event for just this node
+          extensionViewProvider.fireNodeChange(node);
+        } else {
+          console.log(`No cached node found, doing full refresh`);
+          extensionViewProvider.refresh();
+        }
+        
+        // Update details panel immediately too (direct status update)
+        if (DetailsPanel.currentPanel && DetailsPanel.isShowingPackage(pkg)) {
+          console.log(`Updating details panel for uninstalled: ${pkg.id}`);
+          DetailsPanel.currentPanel.updateInstallStatus(pkg, false);
+        }
       }
+    } catch (error) {
+      console.error('Error in uninstall command:', error);
+      vscode.window.showErrorMessage(`Uninstall failed: ${error}`);
     }
   });
 
