@@ -196,6 +196,13 @@ export class TreeViewProvider implements vscode.TreeDataProvider<TreeNode> {
       return new TreeNode(pkg, this);
     }));
     
+    // Sort tree nodes alphabetically by extension name (case-insensitive)
+    treeNodes.sort((a, b) => {
+      const nameA = a.package.extension.name.toLowerCase();
+      const nameB = b.package.extension.name.toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+    
     // Cache the tree nodes for targeted updates
     this.cachedTreeNodes = treeNodes;
     

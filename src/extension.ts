@@ -69,18 +69,18 @@ export function activate(context: vscode.ExtensionContext) {
   vscode.commands.registerCommand(CONSTANTS.cmdUpdate, async (pkg: Package) => {
     // Mark the package as dirty before starting update
     extensionViewProvider.markPackageDirty(pkg);
-    
+
     await vscode.commands.executeCommand(CONSTANTS.cmdInstall, pkg);
-    
+
     // The dirty flag system will automatically update the tree node - no window reload needed
   });
 
   vscode.commands.registerCommand(CONSTANTS.cmdInstall, async (param: any) => {
     console.log(`Starting install for: ${param?.id}`);
-    
+
     try {
       let pkg: Package;
-      
+
       // Check if this is a TreeNode (from tree view) or Package (from details panel)
       if (param?.package) {
         // This is a TreeNode from tree view
@@ -95,35 +95,35 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage('Invalid data for installation');
         return;
       }
-      
+
       console.log('Package exists:', !!pkg);
       console.log('Package.extension exists:', !!pkg?.extension);
       console.log('Package.extension.extensionPath:', pkg?.extension?.extensionPath);
-      
+
       console.log('About to call installExtension...');
       const installedVersion = await installExtension(pkg, context);
       console.log('installExtension returned:', installedVersion);
-      
+
       if (installedVersion) {
         console.log(`Install succeeded for: ${pkg.id}, updating tree and details immediately`);
-        
+
         // Update package state
         pkg.installedVersion = installedVersion;
-        
+
         // Update tree node immediately
         const node = extensionViewProvider.getCachedNode(pkg.id);
         if (node) {
           console.log(`Found cached node, updating to installed state`);
           node.package.installedVersion = installedVersion;
           node.updateDisplay();
-          
+
           // Fire change event for just this node
           extensionViewProvider.fireNodeChange(node);
         } else {
           console.log(`No cached node found, doing full refresh`);
           extensionViewProvider.refresh();
         }
-        
+
         // Update details panel immediately with known install status
         if (DetailsPanel.currentPanel && DetailsPanel.isShowingPackage(pkg)) {
           console.log(`Updating details panel for installed: ${pkg.id}`);
@@ -138,10 +138,10 @@ export function activate(context: vscode.ExtensionContext) {
 
   vscode.commands.registerCommand(CONSTANTS.cmdUninstall, async (param: any) => {
     console.log(`Starting uninstall for: ${param?.id}`);
-    
+
     try {
       let pkg: Package;
-      
+
       // Check if this is a TreeNode (from tree view) or Package (from details panel)
       if (param?.package) {
         // This is a TreeNode from tree view
@@ -156,17 +156,17 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage('Invalid data for uninstallation');
         return;
       }
-      
+
       console.log('About to call uninstallExtension...');
       const uninstalled = await uninstallExtension(pkg);
-      
+
       if (uninstalled) {
         console.log(`Uninstall succeeded for: ${pkg.id}, updating tree immediately`);
-        
+
         // Update the package object state immediately
         pkg.installedVersion = '';
         pkg.extension.metadata.identifier = '';
-        
+
         // Since we know uninstall succeeded, immediately update the tree node
         const node = extensionViewProvider.getCachedNode(pkg.id);
         if (node) {
@@ -174,14 +174,14 @@ export function activate(context: vscode.ExtensionContext) {
           node.package.installedVersion = '';
           node.package.extension.metadata.identifier = '';
           node.updateDisplay();
-          
+
           // Fire change event for just this node
           extensionViewProvider.fireNodeChange(node);
         } else {
           console.log(`No cached node found, doing full refresh`);
           extensionViewProvider.refresh();
         }
-        
+
         // Update details panel immediately too (direct status update)
         if (DetailsPanel.currentPanel && DetailsPanel.isShowingPackage(pkg)) {
           console.log(`Updating details panel for uninstalled: ${pkg.id}`);
@@ -235,7 +235,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (!feedUrl) return;
 
     const existingPaths: string[] = (await vscode.workspace.getConfiguration('')?.get(CONSTANTS.propSource)) || [];
-    
+
     if (existingPaths.includes(feedUrl)) {
       vscode.window.showWarningMessage('This Atom feed is already configured');
       return;
