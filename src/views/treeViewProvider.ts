@@ -142,11 +142,8 @@ export class TreeViewProvider implements vscode.TreeDataProvider<TreeNode> {
             if (retries < 2) { // Retry up to 2 times
               console.log(`Extension still appears installed after uninstall, retrying (${retries + 1}/2)`);
               this.retryCount.set(packageId, retries + 1);
-              // Re-mark as dirty and schedule another check
-              this.dirtyNodes.add(packageId);
-              setTimeout(() => {
-                this.updateDirtyNodes();
-              }, 2000); // Wait another 2 seconds before retrying
+              // Use the existing debounced mechanism instead of direct recursion
+              this.markPackageDirty({ id: packageId } as Package);
               continue; // Skip clearing this dirty flag
             } else {
               console.log(`Max retries reached for ${packageId}, giving up`);
