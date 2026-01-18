@@ -318,16 +318,8 @@ const getExtensionsFromAtomFeed = async (atomFeedUrl: string): Promise<Extension
       extension.metadata.publisher = pkg.authors?.[0] || 'Atom';
       extension.metadata.publishedAt = pkg.publishedAt ? new Date(pkg.publishedAt) : new Date();
       
-      // Try to get the correct identifier by downloading and inspecting the VSIX
-      const correctIdentifier = await getCorrectExtensionIdentifier(downloadUrl, pkg.id, extension.metadata.publisher);
-      extension.metadata.identifier = correctIdentifier;
-      
-      // Update publisher and ID with correct values from the identifier
-      const identifierParts = correctIdentifier.split('.');
-      if (identifierParts.length === 2) {
-        extension.metadata.publisher = identifierParts[0];
-        extension.id = identifierParts[1];
-      }
+      // Construct identifier from available data - don't download during metadata gathering
+      extension.metadata.identifier = `${extension.metadata.publisher.toLowerCase()}.${pkg.id.toLowerCase()}`;
       
       extension.metadata.language = 'en-US';
       extension.metadata.categories = pkg.tags || [];
