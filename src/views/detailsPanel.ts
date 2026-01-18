@@ -156,8 +156,15 @@ export class DetailsPanel {
         return installed;
       }
       
-      // Strategy 3: Check if package name contains the extension name (or vice versa)
-      if (packageName.includes(installedName) || installedName.includes(packageName)) {
+      // Strategy 3: Match extension name part after the first dot (publisher.extensionname)
+      const packageExtensionName = pkg.extension.metadata.identifier.includes('.') 
+        ? pkg.extension.metadata.identifier.split('.').slice(1).join('.').toLowerCase()
+        : packageId;
+      const installedExtensionName = installed.identifier.includes('.') 
+        ? installed.identifier.split('.').slice(1).join('.').toLowerCase()
+        : installedName;
+      
+      if (packageExtensionName === installedExtensionName) {
         return installed;
       }
       
