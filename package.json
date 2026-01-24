@@ -2,7 +2,7 @@
   "name": "pvmp-with-atom-feed",
   "displayName": "Private Marketplace with Atom Feed Support",
   "description": "Private vscode extension marketplace for corporate environments with support for local files and Visual Studio private gallery Atom feeds.",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "icon": "media/assets/icon.png",
   "publisher": "Sudstyle",
   "author": {
