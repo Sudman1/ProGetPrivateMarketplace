@@ -1,8 +1,8 @@
 {
-  "name": "pvmp-plus-atom-feed",
-  "displayName": "Private Marketplace",
+  "name": "pvmp-with-atom-feed",
+  "displayName": "Private Marketplace with Atom Feed Support",
   "description": "Private vscode extension marketplace for corporate environments with support for local files and Visual Studio private gallery Atom feeds.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "icon": "media/assets/icon.png",
   "publisher": "Sudstyle",
   "author": {
@@ -92,7 +92,7 @@
         {
           "id": "pvmp-activitybar",
           "title": "Private Marketplace",
-          "icon": "media/assets/icon.png"
+          "icon": "media/assets/activityicon.png"
         }
       ]
     },
@@ -101,7 +101,7 @@
         {
           "id": "pvmp-extensions",
           "name": "Private Marketplace",
-          "icon": "media/assets/icon.png",
+          "icon": "media/assets/activityicon.png",
           "visibility": "collapsed"
         }
       ]

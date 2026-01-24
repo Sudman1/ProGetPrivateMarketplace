@@ -10,6 +10,10 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 node_modules
+**/*.sh
+**/*.vsix
+**/.*/**
+**/*.xcf
 
 media/assets/overview_labeled.png
 media/assets/overview.png
