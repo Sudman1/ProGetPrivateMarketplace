@@ -30,7 +30,7 @@ To configure Private Marketplace, follow these steps:
 1. Add extension sources:
    - **Local directories:** Use the folder icon to add directories containing .vsix files
    - **Atom feeds:** Use the globe icon to add Atom feed URLs (e.g., `http://localhost:8624/feeds/vscode-extensions/atom.xml`)
-     
+
      The extension will automatically discover and list packages from Atom VSIX feeds using the Atom XML API.
 
 #### Optional:
@@ -72,4 +72,4 @@ This extension is licensed under the [MIT License](LICENSE).
 
 ## Support
 
-If you encounter any issues or have questions, please open an issue on the [GitHub repository](https://github.com/oxdev03/pvmp).
+If you encounter any issues or have questions, please open an issue on the [GitHub repository](https://github.com/Sudman1/ProGetPrivateMarketplace/issues).

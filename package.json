@@ -1,16 +1,16 @@
 {
-  "name": "pvmp",
+  "name": "pvmp-plus-atom-feed",
   "displayName": "Private Marketplace",
-  "description": "private vscode extension marketplace for corporate environments",
-  "version": "0.1.1",
+  "description": "Private vscode extension marketplace for corporate environments with support for local files and Visual Studio private gallery Atom feeds.",
+  "version": "0.2.1",
   "icon": "media/assets/icon.png",
-  "publisher": "oxdev03",
+  "publisher": "Sudstyle",
   "author": {
-    "name": "oxdev03",
-    "url": "https://github.com/oxdev03"
+    "name": "Sudstyle",
+    "url": "https://github.com/Sudman1"
   },
   "bugs": {
-    "url": "https://github.com/oxdev03/pvmp/issues"
+    "url": "https://github.com/Sudman1/ProGetPrivateMarketplace/issues"
   },
   "keywords": [
     "private",
@@ -24,7 +24,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/oxdev03/pvmp"
+    "url": "https://github.com/Sudman1/ProGetPrivateMarketplace"
   },
   "license": "MIT",
   "categories": [
